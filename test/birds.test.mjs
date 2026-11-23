@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 
+process.env.TAXON_LOOKUP = 'false'; // tests never reach GBIF
 process.env.BIRDNET_URL = 'http://127.0.0.1:1'; // replaced per test through the server below
 const config = await import('../src/config.mjs');
 const { openaiClient, comfyWorkflow, comfyClient } = await import('../src/imagegen.mjs');
@@ -145,6 +146,54 @@ test('prompts name the bird and the style', () => {
     assert.match(textPrompt(s, style), /Blue Jay \(Cyanocitta cristata\)/);
     assert.match(editPrompt(s, style), /No text/);
   }
+});
+
+test('prompts follow the kind of animal and the key colour', async () => {
+  const { KEY_COLOURS, pickKey } = await import('../src/keys.mjs');
+  const frog = species('Green Frog', 'Lithobates clamitans', { taxon: 'frog' });
+  const dog = species('Red Fox', 'Vulpes vulpes', { taxon: 'mammal' });
+  const jay = species('Blue Jay', 'Cyanocitta cristata', { taxon: 'bird' });
+  assert.match(textPrompt(frog, 'gould'), /frog.*lily pad/s);
+  assert.doesNotMatch(textPrompt(frog, 'gould'), /bird|feather/);
+  assert.match(editPrompt(dog, 'gould', KEY_COLOURS[1]), /pure cyan \(#00FFFF\)/);
+  assert.match(editPrompt(dog, 'gould'), /Keep what it rests on in the photograph/);
+  assert.match(textPrompt(jay, 'gould'), /perched on a small sprig/);
+  assert.match(textPrompt(jay, 'gould'), /no magenta anywhere on the bird/);
+  // a photo with a lot of pink and purple in the middle is not painted on magenta
+  const pink = await sharp({ create: { width: 64, height: 64, channels: 3, background: { r: 200, g: 70, b: 170 } } }).png().toBuffer();
+  assert.notEqual((await pickKey(pink)).name, 'magenta');
+  const grey = await sharp({ create: { width: 64, height: 64, channels: 3, background: { r: 120, g: 120, b: 120 } } }).png().toBuffer();
+  assert.equal((await pickKey(grey)).name, 'magenta');
+  assert.equal((await pickKey(null)).name, 'magenta');
+});
+
+test('wildlife filter and GBIF groups', async () => {
+  const { isExcluded } = await import('../src/birdnet.mjs');
+  const { groupFromGbif } = await import('../src/taxa.mjs');
+  assert.ok(isExcluded({ common: 'Human vocal', scientific: 'Human vocal' }));
+  assert.ok(isExcluded({ common: 'Dog_Dog', scientific: 'Dog_Dog' }));
+  assert.ok(!isExcluded({ common: 'Gunnison Sage-Grouse', scientific: 'Centrocercus minimus' }), 'whole names only');
+  assert.equal(groupFromGbif({ kingdom: 'Animalia', class: 'Aves' }), 'bird');
+  assert.equal(groupFromGbif({ kingdom: 'Animalia', class: 'Amphibia', order: 'Anura' }), 'frog');
+  assert.equal(groupFromGbif({ kingdom: 'Animalia', class: 'Insecta' }), 'insect');
+  assert.equal(groupFromGbif({ kingdom: 'Animalia', class: 'Chilopoda' }), 'other');
+  assert.equal(groupFromGbif({ kingdom: 'Plantae', class: 'Magnoliopsida' }), null);
+  assert.equal(groupFromGbif({ matchType: 'NONE' }), null);
+});
+
+test('taxonomy asks GBIF once per species and keeps the answer', async () => {
+  const { createTaxonomy } = await import('../src/taxa.mjs');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tax-'));
+  let calls = 0;
+  const fetchImpl = async (u) => { calls++; return { ok: true, json: async () => (/Hyla/.test(u) ? { kingdom: 'Animalia', class: 'Amphibia', order: 'Anura' } : { matchType: 'NONE' }) }; };
+  const tax = createTaxonomy({ dir, enabled: true, fetchImpl });
+  const list = [species('Gray Treefrog', 'Hyla versicolor'), species('Static', 'Noise noise')];
+  const out = await tax.annotate(list);
+  assert.deepEqual(out.map((s) => [s.common, s.taxon]), [['Gray Treefrog', 'frog']]);
+  await createTaxonomy({ dir, enabled: true, fetchImpl }).annotate([species('Gray Treefrog', 'Hyla versicolor')]);
+  assert.equal(calls, 2, 'the second run read the kept answers');
+  const off = await createTaxonomy({ dir: await fs.mkdtemp(path.join(os.tmpdir(), 'tax-')), enabled: false, fetchImpl }).annotate([species('X', 'Y z')]);
+  assert.equal(off.length, 1, 'with lookup off nothing is dropped');
 });
 
 const demoModel = async (withPlate) => {

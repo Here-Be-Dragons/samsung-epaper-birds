@@ -12,6 +12,8 @@ import sharp from 'sharp';
 import * as config from './config.mjs';
 import { fetchThumbnail } from './birdnet.mjs';
 import { cutOut, KEYED } from './cutout.mjs';
+import { KEY_COLOURS, pickKey } from './keys.mjs';
+import { TAXA, taxonOf } from './taxa.mjs';
 
 export const STYLES = {
   gould: {
@@ -54,8 +56,22 @@ export const STYLES = {
 };
 export const STYLE_NAMES = Object.keys(STYLES);
 
-// The bird is painted on a flat key colour that no bird wears, so that it can be cut out cleanly (a pale breast on cream paper cannot).
-export const GROUND = 'flat solid pure magenta (#FF00FF) background, one uniform colour edge to edge, with no gradient, no shadow, no paper texture and no vignette, and with nothing at all behind the bird (no circle, disc, sun, frame, border or shape)';
+// The animal is painted on a flat key colour it does not wear (chosen per animal, keys.mjs), so that it can be cut out cleanly (a pale
+// breast on cream paper cannot). The colour is also forbidden on the animal and its perch, which FLUX.2 mostly respects.
+export function groundFor(key = KEY_COLOURS[0], noun = 'bird') {
+  return `flat solid pure ${key.name} (${key.hex}) background, one uniform colour edge to edge, with no gradient, no shadow, no paper texture and no vignette, with nothing at all behind the ${noun} (no circle, disc, sun, frame, border or shape), and with no ${key.name} anywhere on the ${noun} or on its perch`;
+}
+export const GROUND = groundFor();
+
+/** A style's medium, worded for the kind of animal (the styles are written for birds). */
+export function mediumFor(style, taxon = 'bird') {
+  const m = STYLES[style].medium;
+  if (taxon === 'bird') return m;
+  const noun = TAXA[taxon]?.noun ?? 'animal';
+  return m.replace(/the bird's/g, `the ${noun}'s`).replace(/the bird/g, `the ${noun}`)
+    .replace(/for the feather detail/g, 'for the detail').replace(/delicate feather detail/g, 'delicate detail')
+    .replace(/ornithology book/g, 'natural history book');
+}
 
 /** Ages a cut-out's colours (RGBA PNG in, PNG out): paler and browner blacks, less saturation, a warm cast. Alpha is untouched. */
 export async function toneCutout(png, t) {
@@ -73,13 +89,17 @@ export async function toneCutout(png, t) {
   return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer();
 }
 
-export function textPrompt(species, style) {
-  return `${STYLES[style].medium}, of a ${species.common} (${species.scientific}). A single bird perched on a small sprig of leaves, whole body visible in side profile, accurate plumage and field marks, `
-    + `centred on a ${GROUND}, with generous empty margins. No text, no caption, no border, no signature, no other birds.`;
+export function textPrompt(species, style, key = KEY_COLOURS[0]) {
+  const t = TAXA[taxonOf(species)];
+  return `${mediumFor(style, taxonOf(species))}, of ${t.article} ${species.common} (${species.scientific}). A single ${t.noun} ${t.pose}, on ${t.perch}, `
+    + `the perch a short complete piece that ends naturally well inside the picture, centred on a ${groundFor(key, t.noun)}, with generous empty margins. No text, no caption, no border, no signature, no other animals.`;
 }
-export function editPrompt(species, style) {
-  return `Redraw the bird in this photograph as ${STYLES[style].medium}. It is a ${species.common} (${species.scientific}): keep the bird's species, pose and exact plumage markings, `
-    + `but replace the whole background with a ${GROUND}, and give the bird a small natural perch of leaves. The whole bird stays visible and centred with generous empty margins. No text, no caption, no border, no signature.`;
+export function editPrompt(species, style, key = KEY_COLOURS[0]) {
+  const t = TAXA[taxonOf(species)];
+  return `Redraw the ${t.noun} in this photograph as ${mediumFor(style, taxonOf(species))}. It is ${t.article} ${species.common} (${species.scientific}): keep its species, pose and exact markings. `
+    + `Keep what it rests on in the photograph (the branch, twig, leaves, rock, log, reed or grass) and draw it in the same style as part of the picture: a short, complete piece, `
+    + `its ends tapering or finishing naturally with a few leaves, entirely inside the frame and never running to the edge. If the photograph shows nothing it rests on, give it ${t.perch}. `
+    + `Replace everything else in the background with a ${groundFor(key, t.noun)}. The whole ${t.noun} stays visible and centred with generous empty margins. No text, no caption, no border, no signature.`;
 }
 
 export function createPlateStore({ client = null, dir = config.PLATE_DIR, fetchRef = fetchThumbnail, llm = null, mode = config.PLATE_MODE, perDay = config.PLATES_PER_DAY, now = () => Date.now(), log = console.log } = {}) {
@@ -141,13 +161,14 @@ export function createPlateStore({ client = null, dir = config.PLATE_DIR, fetchR
     const opts = { width: config.PLATE_WIDTH, height: config.PLATE_HEIGHT };
     let raw, how = 'text';
     const ref = mode === 'text' ? null : await fetchRef(species);
-    if (ref && mode !== 'text') { raw = await client.edit(ref, editPrompt(species, style), opts); how = 'edit'; }
+    const key = await pickKey(ref); // the ground colour this animal does not wear
+    if (ref && mode !== 'text') { raw = await client.edit(ref, editPrompt(species, style, key), opts); how = 'edit'; }
     else if (mode === 'edit') throw new Error('no reference photo for this species and PLATE_MODE=edit');
-    else raw = await client.generate(textPrompt(species, style), opts);
+    else raw = await client.generate(textPrompt(species, style, key), opts);
     const png = await sharp(raw).png({ compressionLevel: 9 }).toBuffer();
     await fs.mkdir(path.dirname(file(style, species.slug)), { recursive: true });
     await fs.writeFile(file(style, species.slug), png);
-    await fs.writeFile(file(style, species.slug, 'json'), JSON.stringify({ species: species.scientific, common: species.common, style, how, backend: client.name, at: new Date(now()).toISOString() }, null, 1));
+    await fs.writeFile(file(style, species.slug, 'json'), JSON.stringify({ species: species.scientific, common: species.common, style, how, taxon: taxonOf(species), key: key.hex, backend: client.name, at: new Date(now()).toISOString() }, null, 1));
     memory.set(`${style}/${species.slug}`, png);
     cutting.delete(`${style}/${species.slug}`);
     await fs.rm(cutFile(style, species.slug), { force: true });

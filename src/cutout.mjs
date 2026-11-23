@@ -91,7 +91,7 @@ export async function cutOut(imageBytes, { reach = 70, step = 14, hole = 34, hol
   if (despill) {
     let near = new Uint8Array(N);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; if (alive[i] && edgeOf(alive, x, y, i)) near[i] = 1; }
-    for (let d = 0; d < 6; d++) {
+    for (let d = 0; d < 8; d++) {
       const grown = near.slice();
       for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
         const i = y * W + x;
@@ -99,14 +99,20 @@ export async function cutOut(imageBytes, { reach = 70, step = 14, hole = 34, hol
       }
       near = grown;
     }
-    // The cast is whatever the ground has over grey: for a magenta ground, red and blue above green.
-    const cast = [paper[0] - paper[1], paper[2] - paper[1]];
-    for (let i = 0; i < N; i++) {
-      if (!near[i]) continue;
-      const r = data[i * 3], g = data[i * 3 + 1], b = data[i * 3 + 2];
-      if (cast[0] > 40 && cast[1] > 40) { // magenta-ish ground
-        const spill = Math.min(r - g, b - g);
-        if (spill > 0) { data[i * 3] = r - spill; data[i * 3 + 2] = b - spill; }
+    // The cast is the ground's own channels: the ones it is high in (magenta: red and blue, cyan: green and blue, green: green) rise above
+    // the ones it is low in. Whatever a pixel has of that is the ground showing through, so take it out. A pale ground has no cast.
+    const highs = [0, 1, 2].filter((c) => paper[c] > 150), lows = [0, 1, 2].filter((c) => paper[c] < 100);
+    if (highs.length && lows.length) {
+      const groundSpill = Math.min(...highs.map((c) => paper[c])) - Math.max(...lows.map((c) => paper[c]));
+      for (let i = 0; i < N; i++) {
+        if (!near[i]) continue;
+        const v = [data[i * 3], data[i * 3 + 1], data[i * 3 + 2]];
+        const spill = Math.min(...highs.map((c) => v[c])) - Math.max(...lows.map((c) => v[c]));
+        if (spill <= 0) continue;
+        // More than about half the ground's own cast, in the band at the cut: this is the ground blending into the edge, not the animal.
+        // Subtracting it would leave dark off-colour specks, so it goes with the ground.
+        if (spill > groundSpill * 0.55) { alive[i] = 0; continue; }
+        for (const c of highs) data[i * 3 + c] = v[c] - spill;
       }
     }
   }
@@ -132,5 +138,9 @@ export async function cutOut(imageBytes, { reach = 70, step = 14, hole = 34, hol
   return sharp(rgba, { raw: { width: box.width, height: box.height, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer();
 }
 
-/** Settings for a bird painted on a flat magenta ground (plates.GROUND): only near-magenta pixels are ground. */
-export const KEYED = { reach: 60, step: 30, hole: 60, holeArea: 0.04, erode: 3, despill: true };
+/**
+ * Settings for an animal painted on a flat key-colour ground (plates.groundFor): only pixels very close to the ground are ground. The
+ * reach and hole are tight so that a pink sheen or a pink foot is not mistaken for magenta, the erosion is one pixel so that twigs and
+ * leaf tips survive, and the despill (a band around the cut) takes the ground's tint out of the edge instead.
+ */
+export const KEYED = { reach: 45, step: 26, hole: 28, holeArea: 0.04, speck: 0.004, erode: 1, feather: 1, despill: true };

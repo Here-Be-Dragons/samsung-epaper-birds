@@ -3,6 +3,7 @@
  * used as a reference for the painter. Reads are public in BirdNET-Go; a token is only for a proxy that wants one.
  */
 import * as config from './config.mjs';
+import { createTaxonomy } from './taxa.mjs';
 
 const headers = () => (config.BIRDNET_TOKEN ? { Authorization: `Bearer ${config.BIRDNET_TOKEN}` } : {});
 
@@ -45,9 +46,17 @@ function fromSummary(r) {
  * The birds to show: today's species that pass the filters, or (when none does) the recent past.
  * Returns { day, window, species (busiest first), latest (the one heard last), ok }.
  */
+/** A label that is not wildlife (a person, an engine...), by the whole common or scientific name; labels like "Dog_Dog" count as "dog". */
+export function isExcluded(s, list = config.EXCLUDE) {
+  const names = [s.common, s.scientific].filter(Boolean).map((n) => String(n).toLowerCase().trim());
+  return names.some((n) => list.includes(n) || list.includes(n.split('_')[0]));
+}
+
+let taxonomy = null;
+
 export async function getBirds({ now = new Date() } = {}) {
   const day = dayKey(now);
-  const keep = (s) => s.count >= config.MIN_DETECTIONS && s.maxConfidence >= config.MIN_CONFIDENCE;
+  const keep = (s) => s.count >= config.MIN_DETECTIONS && s.maxConfidence >= config.MIN_CONFIDENCE && !isExcluded(s);
   const daily = (await getJson(`/api/v2/analytics/species/daily?date=${day}`)).map(fromDaily).filter(keep);
   let species = daily, window = 'today';
   if (!species.length && config.FALLBACK_DAYS > 0) {
@@ -56,6 +65,8 @@ export async function getBirds({ now = new Date() } = {}) {
     species = rows.map(fromSummary).filter(keep);
     window = `the last ${config.FALLBACK_DAYS} days`;
   }
+  taxonomy ??= createTaxonomy();
+  species = await taxonomy.annotate(species); // adds the kind of animal; drops what GBIF says is not one
   species.sort((a, b) => b.count - a.count || a.scientific.localeCompare(b.scientific));
   const latest = [...species].sort((a, b) => b.latestHeard.localeCompare(a.latestHeard) || b.count - a.count)[0] ?? null;
   return { day, window, species, latest, ok: true };

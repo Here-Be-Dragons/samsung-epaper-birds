@@ -29,7 +29,8 @@ import { publicUrlWarnings } from './netcheck.mjs';
 const app = express();
 let localIp = getLocalIp();
 if (typeof localIp !== 'string' || !/^\d+\.\d+\.\d+\.\d+$/.test(localIp)) {
-  console.warn('[config] Could not auto-detect LAN IP (common inside Docker): set PUBLIC_HOST to this machine’s LAN IP. Falling back to "localhost".');
+  // Only worth saying when nothing else tells the panel where to fetch from.
+  if (!config.PUBLIC_HOST && !config.PUBLIC_URL) console.warn('[config] Could not auto-detect LAN IP (common inside Docker): set PUBLIC_HOST to this machine’s LAN IP. Falling back to "localhost".');
   localIp = 'localhost';
 }
 

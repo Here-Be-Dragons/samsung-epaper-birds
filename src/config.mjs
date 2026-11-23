@@ -63,6 +63,12 @@ export const MIN_DETECTIONS = int('MIN_DETECTIONS', 2);
 export const MIN_CONFIDENCE = num('MIN_CONFIDENCE', 0.6);
 // If nothing qualifies today, fall back to the best of the last N days (a quiet morning still shows a bird).
 export const FALLBACK_DAYS = int('FALLBACK_DAYS', 7);
+// Detections that are not wildlife (BirdNET-Go and Perch also label people, engines and the like), matched whole against the common or
+// scientific name, lower case. Setting EXCLUDE replaces this list; add domestic animals here too if you do not want them painted.
+const DEFAULT_EXCLUDE = 'human,human vocal,human non-vocal,human whistle,engine,siren,gun,fireworks,power tools,environmental,noise,dog,domestic dog,canis familiaris,canis lupus familiaris,domestic cat,felis catus';
+export const EXCLUDE = str('EXCLUDE', DEFAULT_EXCLUDE).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+// What kind of animal each species is (bird, frog, insect...) comes from GBIF's name match: only the scientific name is sent, once.
+export const TAXON_LOOKUP = bool('TAXON_LOOKUP', true);
 // The bird the folio layout features: latest (the one heard last) | top (the most heard today).
 export const FEATURE = str('FEATURE', 'latest').toLowerCase();
 if (!['latest', 'top'].includes(FEATURE)) throw new Error('FEATURE must be latest or top');

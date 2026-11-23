@@ -119,6 +119,43 @@ test('cutOut on a magenta ground: a pale bird keeps its pale breast, and the gro
   }
 });
 
+test('cutOut on a magenta ground keeps a pink sheen and pink feet instead of cutting holes in them', async () => {
+  const size = 240, c = size / 2;
+  const raw = Buffer.alloc(size * size * 3);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const i = (y * size + x) * 3;
+    const r = Math.hypot((x - c) / 70, (y - c) / 60);
+    let px = [240, 0, 170]; // the ground, as FLUX paints it: not quite #FF00FF
+    if (r < 1) px = [110, 110, 120]; // a grey body
+    if (Math.hypot(x - c, y - c) < 18) px = [205, 60, 140]; // a pink sheen patch, enclosed
+    if (Math.abs(x - c) < 4 && y > c + 55 && y < c + 100) px = [150, 60, 90]; // a thin maroon twig below the body
+    raw[i] = px[0]; raw[i + 1] = px[1]; raw[i + 2] = px[2];
+  }
+  const out = await cutOut(await sharp(raw, { raw: { width: size, height: size, channels: 3 } }).png().toBuffer(), KEYED);
+  const { data, info } = await sharp(out).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const alphaAt = (x, y) => data[(y * info.width + x) * 4 + 3];
+  assert.equal(alphaAt(info.width >> 1, Math.round(info.height * 0.45)), 255, 'the pink patch is still there (the cut is trimmed, so look at the middle of it)');
+  let twig = 0;
+  for (let y = Math.round(info.height * 0.8); y < info.height - 2; y++) twig += alphaAt(info.width >> 1, y) > 128 ? 1 : 0;
+  assert.ok(twig > 20, `the thin twig survives (${twig} opaque rows)`);
+});
+
+test('cutOut despills a cyan ground too', async () => {
+  const size = 200, c = size / 2;
+  const raw = Buffer.alloc(size * size * 3);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const i = (y * size + x) * 3;
+    const px = Math.hypot((x - c) / 60, (y - c) / 50) < 1 ? [200, 90, 60] : [0, 250, 250];
+    raw[i] = px[0]; raw[i + 1] = px[1]; raw[i + 2] = px[2];
+  }
+  const out = await cutOut(await sharp(raw, { raw: { width: size, height: size, channels: 3 } }).png().toBuffer(), KEYED);
+  const { data, info } = await sharp(out).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  for (let i = 0; i < info.width * info.height; i++) {
+    const [r, g, b, a] = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]];
+    if (a === 255) assert.ok(Math.min(g, b) - r < 60, 'no cyan left on opaque pixels');
+  }
+});
+
 test('the cluster page has no hard disc in the middle, in any style (the highlight never snaps to white)', async () => {
   const geometry = geometryFor({ width: 720, height: 1280, rotation: 0 });
   for (const style of STYLE_NAMES) {

@@ -47,8 +47,8 @@ docker compose -f docker-compose.yml -f docker-compose.desktop.yml up -d --build
 Plates, cut-outs and the panel's remembered state are kept in the `bird-data` volume (`/data`). The helper scripts are in the image:
 
 ```sh
-docker compose exec samsung-epaper-birds node scripts/paint-today.mjs gould   # paint today's birds in a style ahead of time
-docker compose exec samsung-epaper-birds node scripts/render-today.mjs gould /data/gould.png   # render a page without touching the panel
+docker compose exec -u node samsung-epaper-birds node scripts/paint-today.mjs gould   # paint today's birds in a style ahead of time
+docker compose exec -u node samsung-epaper-birds node scripts/render-today.mjs gould /data/gould.png   # render a page without touching the panel
 ```
 
 A GitHub Actions workflow runs the tests and a test build on every push, and `docker.yml` publishes a multi-arch image to
