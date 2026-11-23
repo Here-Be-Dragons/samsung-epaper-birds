@@ -1,0 +1,22 @@
+{
+  "name": "samsung-epaper-birds",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "main": "src/server.mjs",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "demo": "node scripts/render-demo.mjs",
+    "plate": "node --env-file=.env scripts/make-plate.mjs"
+  },
+  "dependencies": {
+    "@loxjs/node-local-ip": "^2.0.3",
+    "@napi-rs/canvas": "^0.1.57",
+    "express": "^5.1.0",
+    "mqtt": "^5.16.1",
+    "sharp": "^0.35.5"
+  },
+  "engines": { "node": ">=20" }
+}

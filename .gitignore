@@ -1,0 +1,23 @@
+node_modules/
+npm-debug.log*
+*.log
+
+# Local config: holds the panel PIN and MQTT/API credentials. Never commit.
+.env
+.env.*
+!.env.example
+
+# Runtime data: painted plates and cut-outs, field notes, rendered samples, the panel's remembered state
+/data/
+state.json
+*.jsonl
+
+# Local tooling state
+.claude/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

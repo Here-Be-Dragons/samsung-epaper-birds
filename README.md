@@ -15,6 +15,8 @@ double-ruled folio pages, hand-coloured lithograph plates after Gould and Audubo
 - Until a plate exists, its place shows a hatched "plate in preparation" card; when it lands the picture changes and the
   panel is redrawn.
 
+![The cluster page, Gould style](docs/images/cluster.png)
+
 ## Layouts and styles
 
 | Layout | Shows |
@@ -23,15 +25,34 @@ double-ruled folio pages, hand-coloured lithograph plates after Gould and Audubo
 | `folio` | One bird (the one heard last, or the most heard) as a full plate, its name, field note and first-heard time, and the other birds listed beneath |
 | `specimen` | Up to six birds on one sheet, each with its plate number, name and Latin name |
 
-Styles: `gould` (hand-coloured lithograph, default), `audubon` (watercolour plate), `engraving` (black ink, best on
-mono panels). Each style keeps its own plates, so switching costs nothing after the first time.
+Styles: `gould` (hand-coloured lithograph on aged paper, default), `audubon` (watercolour plate), `engraving` (black ink, best on
+mono panels), `woodblock` (ukiyo-e) and `midcentury` (flat geometric, after Harper). Each style keeps its own plates, so switching
+costs nothing after the first time.
 
 ## Run
 
 ```sh
-cp .env.example .env     # set PUBLIC_HOST, the panel's DISPLAY_HOST / DISPLAY_PIN, and the FLUX.2 backend
+cp .env.example .env     # set BIRDNET_URL, the FLUX.2 backend, and the panel's DISPLAY_HOST / DISPLAY_PIN
 docker compose up -d --build
 ```
+
+On Linux the compose file uses host networking, so the panel can download its pictures from the machine's own LAN address (found
+each time a picture is pushed). On **Docker Desktop (Mac or Windows)** host networking does not reach your LAN; add the override
+and set `PUBLIC_HOST` in `.env` to the computer's address on the panel's network, and keep the computer on that network:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.desktop.yml up -d --build
+```
+
+Plates, cut-outs and the panel's remembered state are kept in the `bird-data` volume (`/data`). The helper scripts are in the image:
+
+```sh
+docker compose exec samsung-epaper-birds node scripts/paint-today.mjs gould   # paint today's birds in a style ahead of time
+docker compose exec samsung-epaper-birds node scripts/render-today.mjs gould /data/gould.png   # render a page without touching the panel
+```
+
+A GitHub Actions workflow runs the tests and a test build on every push, and `docker.yml` publishes a multi-arch image to
+`ghcr.io/<owner>/<repo>` when you push a version tag.
 
 Without a panel host and PIN it only renders and serves: open `http://<host>:<PORT>/` for the current frame,
 `/preview?layout=folio&style=audubon` to try other looks, and `/plates` for the painted plates.

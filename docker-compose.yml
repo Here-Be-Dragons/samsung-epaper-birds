@@ -1,0 +1,24 @@
+services:
+  samsung-epaper-birds:
+    build: .
+    image: samsung-epaper-birds:latest
+    container_name: samsung-epaper-birds
+    restart: unless-stopped
+    init: true
+    # Host networking (Linux): the panel fetches its pictures from this machine's own LAN address, and a Wake-on-LAN
+    # broadcast has to leave on your LAN. The server listens on PORT from .env (default 8080), and the address the
+    # panel is told to fetch from is this machine's own, found each time a picture is pushed.
+    # On Docker Desktop (Mac or Windows) host networking does not reach your LAN: use docker-compose.desktop.yml too:
+    #   docker compose -f docker-compose.yml -f docker-compose.desktop.yml up -d --build
+    network_mode: host
+    # Settings come from .env (copy .env.example); nothing is set here, so nothing here can silently override it.
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # The painted plates and their cut-outs (a plate costs a FLUX.2 pass, so keep them across restarts) and the
+      # panel's remembered state. To start with plates you already have, copy them to data/plates/<style>/ in this volume.
+      - bird-data:/data
+
+volumes:
+  bird-data:

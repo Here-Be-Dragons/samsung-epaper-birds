@@ -1,0 +1,17 @@
+.git
+.github
+node_modules
+npm-debug.log*
+.env
+.env.*
+!.env.example
+.claude
+.DS_Store
+# Not needed in the image (the scripts are: see the Dockerfile)
+test
+docs
+data
+*.md
+LICENSE
+Dockerfile
+docker-compose*.yml

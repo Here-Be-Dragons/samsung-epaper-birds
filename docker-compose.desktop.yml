@@ -1,0 +1,9 @@
+# For Docker Desktop (Mac or Windows), where host networking does not reach your LAN. Use it with the main file:
+#   docker compose -f docker-compose.yml -f docker-compose.desktop.yml up -d --build
+# Set PUBLIC_HOST in .env to this computer's address on the panel's network (the container cannot find it by itself),
+# and keep the computer on that network: the panel fetches each picture from PUBLIC_HOST:PORT.
+services:
+  samsung-epaper-birds:
+    network_mode: !reset null
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
